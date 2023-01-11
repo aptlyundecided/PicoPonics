@@ -5,7 +5,23 @@ and low power.
 
 under construction -- please ignore my mess
 
-## README UNDER CONSTRUCTION
+
+## Current Version Description
+A quick bullet point run-down of the intended function of the system.
+
+### Pins
+- GP18 is switched on and off on a schedule (hard coded from 7AM to 1PM)
+- GP15 is set up to be an input for adjusting the time
+- GP2 is an SDA pin for I2C comms to a ssd1306 OLED display
+- GP3 is an SCL pin for I2C comms to a ssd1306 OLED display
+
+### Functionality
+- The display shows what the controller things the current time is
+- Wire a 5VDC button to GP15 and hold it down to adjust the time (normally open button)
+- The time is a 24-hour clock that loops around at 23:59
+
+
+## README STILL UNDER CONSTRUCTION
 - pushing this up now so that something exists
 
 ## Getting Started
