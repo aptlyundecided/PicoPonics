@@ -30,7 +30,6 @@ use rp2040_hal::clocks::Clock;
 
 use fugit::RateExtU32;
 use core::fmt::Write;
-use core::char;
 use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
 
 
@@ -45,10 +44,6 @@ pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_GENERIC_03H;
 /// External high-speed crystal on the Raspberry Pi Pico board is 12 MHz. Adjust
 /// if your board has a different frequency
 const XTAL_FREQ_HZ: u32 = 12_000_000u32;
-
-
-
-
 
 
 /// Entry point to our bare-metal application.
@@ -97,13 +92,13 @@ fn main() -> ! {
     // Configure two pins as being I²C, not GPIO
     let scl_pin = pins.gpio3.into_mode::<hal::gpio::FunctionI2C>();
     let sda_pin = pins.gpio2.into_mode::<hal::gpio::FunctionI2C>();
-    let mut gp18 = pins.gpio18.into_push_pull_output();
     let gp15 = pins.gpio15.into_pull_down_input();
+    let mut gp18 = pins.gpio18.into_push_pull_output();
 
     // Create the I²C drive, using the two pre-configured pins. This will fail
     // at compile time if the pins are in the wrong mode, or if this I²C
     // peripheral isn't available on these pins!
-    let mut i2c = hal::I2C::i2c1(
+    let i2c = hal::I2C::i2c1(
         pac.I2C1,
         sda_pin,
         scl_pin,
@@ -117,14 +112,9 @@ fn main() -> ! {
 
     let mut gp18_config = GPConfig::new();
 
-    // TODO:AW - timer should be live-configurable
     // 6 hours run time for the lights
-    gp18_config.set_start_hours(7);
-    gp18_config.set_start_minutes(0);
-    gp18_config.set_start_seconds(0);
-    gp18_config.set_end_hours(19);
-    gp18_config.set_end_minutes(0);
-    gp18_config.set_end_seconds(0);
+    gp18_config.set_start_time(7, 0, 0);
+    gp18_config.set_end_time(14, 0, 0);
 
     let mut time_keeper = TimeKeeper::new();
 
@@ -141,37 +131,25 @@ fn main() -> ! {
     display.init().unwrap();
     display.clear().unwrap();
 
-    let mut message_chars: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
-    let hours = get_time_chars(0);
-    let minutes = get_time_chars(0);
-    let seconds = get_time_chars(0);
-    message_chars[0] = hours.0 as u8;
-    message_chars[1] = hours.1 as u8;
-    message_chars[2] = ':' as u8;
-    message_chars[3] = minutes.0 as u8;
-    message_chars[4] = minutes.1 as u8;
-    message_chars[5] = ':' as u8;
-    message_chars[6] = seconds.0 as u8;
-    message_chars[7] = seconds.1 as u8;
+    // let mut message_chars: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+    // let hours = get_time_chars(0);
+    // let minutes = get_time_chars(0);
+    // let seconds = get_time_chars(0);
+    // message_chars[0] = hours.0 as u8;
+    // message_chars[1] = hours.1 as u8;
+    // message_chars[2] = ':' as u8;
+    // message_chars[3] = minutes.0 as u8;
+    // message_chars[4] = minutes.1 as u8;
+    // message_chars[5] = ':' as u8;
+    // message_chars[6] = seconds.0 as u8;
+    // message_chars[7] = seconds.1 as u8;
 
 
-    for c in message_chars {
-        let _ = display.write_str(unsafe { core::str::from_utf8_unchecked(&[c]) });
-    }
+    // for c in message_chars {
+    //     let _ = display.write_str(unsafe { core::str::from_utf8_unchecked(&[c]) });
+    // }
 
     loop {
-        // create one second delay
-        delay.delay_ms(1000);
-
-        // Timekeeper updates because it's role is to keep track of a
-        // locally created system time.
-        time_keeper.tick();
-
-        // Check if the time adjust is pressed
-        if gp15.is_high().unwrap() {
-            time_keeper.increment_hours();
-        }
-
         let hours = get_time_chars(time_keeper.hours);
         let minutes = get_time_chars(time_keeper.minutes);
         let seconds = get_time_chars(time_keeper.seconds);
@@ -188,28 +166,37 @@ fn main() -> ! {
 
 
         // Init and clear the screen
-        // display.init().unwrap();
         display.clear().unwrap();
 
         for c in time_message {
             let _ = display.write_str(unsafe { core::str::from_utf8_unchecked(&[c]) });
         }
 
-        let between5And10 = time_keeper.seconds > 10 && time_keeper.seconds < 15;
+        // create one second delay
+        delay.delay_ms(1000);
+
+        // Timekeeper updates because it's role is to keep track of a
+        // locally created system time.
+        time_keeper.tick();
+
+        // Check if the time adjust is pressed
+        if gp15.is_high().unwrap() {
+            time_keeper.increment_hours();
+        }
+
+
 
         let tk_hours = time_keeper.hours;
-        let light_on = tk_hours >= 7 && tk_hours < 13;
 
-        if light_on {
+        // GP18 Output handling
+        let gp18_after_start_time = tk_hours >= gp18_config.start_hours;
+        let gp18_before_end_time: bool = tk_hours < gp18_config.end_hours;
+        let gp18_on: bool = gp18_after_start_time && gp18_before_end_time;
+
+        if gp18_on {
             gp18.set_high().unwrap();
-            // output_pins._18.set_high().unwrap();
-            // output_pins.pin_on(18);
-            // out_pin.set_high().unwrap();
         } else {
             gp18.set_low().unwrap();
-            // output_pins.pin_off(18);
-            // output_pins._18.set_low().unwrap();
-            // out_pin.set_low().unwrap();
         }
     }
 }
