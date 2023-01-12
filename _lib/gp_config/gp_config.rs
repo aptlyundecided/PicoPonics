@@ -43,4 +43,16 @@ impl GPConfig {
     pub fn set_end_seconds(&mut self, seconds: u8) {
         self.end_seconds = seconds;
     }
+
+    pub fn set_start_time(&mut self, hours: u8, minutes: u8, seconds: u8) {
+        self.set_start_hours(hours);
+        self.set_start_minutes(minutes);
+        self.set_start_seconds(seconds);
+    }
+
+    pub fn set_end_time(&mut self, hours: u8, minutes: u8, seconds: u8) {
+        self.set_end_hours(hours);
+        self.set_end_minutes(minutes);
+        self.set_end_seconds(seconds);
+    }
 }
