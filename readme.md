@@ -46,6 +46,10 @@ A quick bullet point run-down of the intended function of the current system.
 
 
 ### v0.1.0 (Self Contained Series Mk1)
+- [ ] create a menu struct that can be used to navigate a menu system
+- [ ] create a menu parser, so menu objects can be passed around.  Menu selections
+  can theoretically be made from anywhere in the system using something like this when
+ it grows into the realm of distributed control.
 - [ ] stl files for 3D printing enclosures
 - [ ] wiring diagrams
 - [ ] configurable schedule for output pins
