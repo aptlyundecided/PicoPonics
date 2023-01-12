@@ -1,10 +1,11 @@
 [package]
 name = "pico-ponics"
-version = "0.1.0"
+version = "0.0.1"
 
 
 [target.thumbv6m-none-eabi]
 runner = "probe-run --chip RP2040"
+
 
 [dependencies]
 rp2040-hal = "0.7.0"
@@ -17,17 +18,6 @@ hd44780-driver = "0.4.0"
 fugit = "0.3.6"
 ssd1306 = "0.7.1"
 
-[[bin]]
-name = "gp18"
-path = "gpio_gp18_blinky.rs"
-
-[[bin]]
-name = "scheduler"
-path = "scheduler.rs"
-
-[[bin]]
-name = "i2c-test"
-path = "i2cuh.rs"
 
 [[bin]]
 name = "pico-ponics-mk1"
