@@ -15,6 +15,7 @@ mod _lib;
 use _lib::time_keeper::time_keeper::TimeKeeper;
 use _lib::time_keeper::u8_time_mapping::get_time_chars;
 use _lib::gp_config::gp_config::GPConfig;
+use _lib::state_machine::state::{PicoState};
 
 // Alias for our HAL crate
 use rp2040_hal as hal;
@@ -22,6 +23,7 @@ use rp2040_hal as hal;
 // A shorter alias for the Peripheral Access Crate, which provides low-level
 // register access
 use hal::pac;
+use hal::gpio::Pins;
 
 // Some traits we need
 // use embedded_hal::digital::v2::InputPin;
@@ -43,7 +45,7 @@ pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_GENERIC_03H;
 
 /// External high-speed crystal on the Raspberry Pi Pico board is 12 MHz. Adjust
 /// if your board has a different frequency
-const XTAL_FREQ_HZ: u32 = 12_000_000u32;
+const XTAL_FREQ_HZ: u32 = 12_500_000u32;
 
 
 /// Entry point to our bare-metal application.
@@ -61,6 +63,8 @@ fn main() -> ! {
 
     // Set up the watchdog driver - needed by the clock setup code
     let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
+
+    let mut pico_state: PicoState = PicoState::new();
 
     // Configure the clocks
     let clocks = hal::clocks::init_clocks_and_plls(
@@ -82,7 +86,7 @@ fn main() -> ! {
     let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
     // Set the pins to their default state
-    let pins = hal::gpio::Pins::new(
+    let pins: Pins = Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
         sio.gpio_bank0,
@@ -92,7 +96,23 @@ fn main() -> ! {
     // Configure two pins as being I²C, not GPIO
     let scl_pin = pins.gpio3.into_mode::<hal::gpio::FunctionI2C>();
     let sda_pin = pins.gpio2.into_mode::<hal::gpio::FunctionI2C>();
+
+    /// Configure Inputs [gp6 - gp9]
+    /// ---
+    /// Only four Dinputs because I want more availability for comms channels.  I want
+    /// inputs to come from external devices that I'm tinkering with later on.
+    let gp6 = pins.gpio6.into_pull_down_input();
+    let gp7 = pins.gpio7.into_pull_down_input();
+    let gp8 = pins.gpio8.into_pull_down_input();
+    let gp9 = pins.gpio9.into_pull_down_input();
+
+    // TODO:AW change to output pin
     let gp15 = pins.gpio15.into_pull_down_input();
+
+    /// Configure Outputs [gp10 - gp21]
+    /// ---
+    /// more digital outputs than inputs because first version will be more of an
+    /// advanced timer.  Advanced inputs will come from i2C comms from another Pico.
     let mut gp18 = pins.gpio18.into_push_pull_output();
 
     // Create the I²C drive, using the two pre-configured pins. This will fail
@@ -131,24 +151,6 @@ fn main() -> ! {
     display.init().unwrap();
     display.clear().unwrap();
 
-    // let mut message_chars: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
-    // let hours = get_time_chars(0);
-    // let minutes = get_time_chars(0);
-    // let seconds = get_time_chars(0);
-    // message_chars[0] = hours.0 as u8;
-    // message_chars[1] = hours.1 as u8;
-    // message_chars[2] = ':' as u8;
-    // message_chars[3] = minutes.0 as u8;
-    // message_chars[4] = minutes.1 as u8;
-    // message_chars[5] = ':' as u8;
-    // message_chars[6] = seconds.0 as u8;
-    // message_chars[7] = seconds.1 as u8;
-
-
-    // for c in message_chars {
-    //     let _ = display.write_str(unsafe { core::str::from_utf8_unchecked(&[c]) });
-    // }
-
     loop {
         let hours = get_time_chars(time_keeper.hours);
         let minutes = get_time_chars(time_keeper.minutes);
@@ -172,6 +174,19 @@ fn main() -> ! {
             let _ = display.write_str(unsafe { core::str::from_utf8_unchecked(&[c]) });
         }
 
+
+
+
+        // map Input Status to PicoState
+        pico_state.enter_button = gp6.is_high().unwrap();
+        pico_state.cursor_move_button = gp7.is_high().unwrap();
+
+        // map comms data onto pico state
+        // TODO|AW: !
+
+        // map output status onto PicoState
+
+
         // create one second delay
         delay.delay_ms(1000);
 
@@ -183,8 +198,6 @@ fn main() -> ! {
         if gp15.is_high().unwrap() {
             time_keeper.increment_hours();
         }
-
-
 
         let tk_hours = time_keeper.hours;
 
