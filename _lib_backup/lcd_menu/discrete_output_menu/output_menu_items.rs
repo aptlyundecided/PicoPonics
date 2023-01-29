@@ -39,6 +39,11 @@ impl OutputMenuOptions {
     pub fn get_option_val(&self, opt: u8) -> [char; 12] {
         output_option_list(opt)
     }
+    pub fn increment_option_cursor(&mut self) {
+        if self.option_cursor_index < 2 {
+            self.option_cursor_index += 1;
+        }
+    }
 }
 
 pub struct OutputMenuSelections {
@@ -53,5 +58,34 @@ impl OutputMenuSelections {
     }
     pub fn get_selection_val(&self, opt: u8) -> [char; 2] {
         output_selection_list(opt)
+    }
+}
+
+pub struct OutputMenu {
+    pub options: OutputMenuOptions,
+    pub selections: OutputMenuSelections,
+    pub mode: u8
+}
+
+impl OutputMenu {
+    pub fn new() -> OutputMenu {
+        OutputMenu {
+            options: OutputMenuOptions::new(),
+            selections: OutputMenuSelections::new(),
+            mode: 0
+        }
+    }
+    pub fn handle_selection(&mut self) {
+        match self.mode {
+            0 => {
+                match self.options.option_cursor_index {
+                    0 => self.mode = 1000,
+                    1 => self.mode = 1001,
+                    2 => self.mode = 1002,
+                    _ => self.mode = 0
+                }
+            }
+            _ => {}
+        }
     }
 }
