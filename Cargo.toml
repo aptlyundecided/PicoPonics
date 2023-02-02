@@ -18,7 +18,7 @@ hd44780-driver = "0.4.0"
 fugit = "0.3.6"
 ssd1306 = "0.7.1"
 pico_ponics_lib = { path = "../pico-ponics-lib" }
-#tlib = { path = "tlib" }
+
 
 [dev-dependencies]
 substance-framework = "0.3.0-alpha"
@@ -28,17 +28,3 @@ substance-framework = "0.3.0-alpha"
 name = "pico-ponics-mk1"
 path = "pico-ponics-mk1.rs"
 
-
-#[lib]
-#name = "_lib"           # The name of the target.
-#path = "_lib/mod.rs"    # The source file of the target.
-#test = true            # Is tested by default.
-##doctest = true         # Documentation examples are tested by default.
-##bench = true           # Is benchmarked by default.
-##doc = true             # Is documented by default.
-##plugin = false         # Used as a compiler plugin (deprecated).
-##proc-macro = false     # Set to `true` for a proc-macro library.
-##harness = true         # Use libtest harness.
-##edition = "2015"       # The edition of the target.
-#crate-type = ["lib"]   # The crate types to generate.
-##required-features = [] # Features required to build this target (N/A for lib).

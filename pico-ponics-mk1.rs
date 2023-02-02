@@ -38,6 +38,8 @@ use rp2040_hal::clocks::Clock;
 
 use fugit::RateExtU32;
 use core::fmt::Write;
+use _lib::state_machine::interface_utils::lcd_menu_interpreter::create_schedule_update::create_schedule_update;
+use _lib::state_machine::state_update_actions::pin_schedule_updates::PinScheduleUpdate;
 use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
 
 /// The linker will place this boot block at the start of our program image. We
@@ -50,7 +52,7 @@ pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_GENERIC_03H;
 
 /// External high-speed crystal on the Raspberry Pi Pico board is 12 MHz. Adjust
 /// if your board has a different frequency
-const XTAL_FREQ_HZ: u32 = 12_500_000u32;
+const XTAL_FREQ_HZ: u32 = 12_000_000u32;
 
 
 /// Entry point to our bare-metal application.
@@ -123,8 +125,12 @@ fn main() -> ! {
     /// ---
     /// more digital outputs than inputs because first version will be more of an
     /// advanced timer.  Advanced inputs will come from i2C comms from another Pico.
-    let mut gp18 = pins.gpio18.into_push_pull_output();
+    let mut gp10 = pins.gpio10.into_push_pull_output();
+    let mut gp11 = pins.gpio11.into_push_pull_output();
+    let mut gp12 = pins.gpio12.into_push_pull_output();
 
+    let mut gp18 = pins.gpio18.into_push_pull_output();
+    let mut gp25 = pins.gpio25.into_push_pull_output();
     // Create the I²C drive, using the two pre-configured pins. This will fail
     // at compile time if the pins are in the wrong mode, or if this I²C
     // peripheral isn't available on these pins!
@@ -139,7 +145,6 @@ fn main() -> ! {
 
     // Configure GPIO outputs
     // let mut output_pins = DigitalOutputs::new(pins);
-
     let mut gp18_config = GPConfig::new();
 
     // 6 hours run time for the lights
@@ -161,28 +166,59 @@ fn main() -> ! {
     display.init().unwrap();
     display.clear().unwrap();
 
+
+    // --- TESTING --- //
+    pico_state.output_pins.pin10.schedule.start_time.hours = 0;
+    pico_state.output_pins.pin10.schedule.start_time.minutes = 0;
+    pico_state.output_pins.pin10.schedule.start_time.seconds = 0;
+    pico_state.output_pins.pin10.schedule.end_time.hours = 0;
+    pico_state.output_pins.pin10.schedule.end_time.minutes = 0;
+    pico_state.output_pins.pin10.schedule.end_time.seconds = 0;
+
+    pico_state.output_pins.pin18.schedule.start_time.hours = 7;
+    pico_state.output_pins.pin18.schedule.start_time.minutes = 0;
+    pico_state.output_pins.pin18.schedule.start_time.seconds = 0;
+    pico_state.output_pins.pin18.schedule.end_time.hours = 14;
+    pico_state.output_pins.pin18.schedule.end_time.minutes = 0;
+    pico_state.output_pins.pin18.schedule.end_time.seconds = 0;
+
+
+    /*
+        BEGIN PROGRAM LOOP / SCAN CYCLE
+        ---
+        ^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V^V
+     */
     loop {
-        let hours = get_time_chars(time_keeper.hours);
-        let minutes = get_time_chars(time_keeper.minutes);
-        let seconds = get_time_chars(time_keeper.seconds);
-        let time_message = [
-            hours.0 as u8,
-            hours.1 as u8,
-            ':' as u8,
-            minutes.0 as u8,
-            minutes.1 as u8,
-            ':' as u8,
-            seconds.0 as u8,
-            seconds.1 as u8,
-        ];
 
+        // TODO|AW: This is a hack to get the time keeper working
+        // Rudimentary Time Keeping
+        time_keeper.loop_handler();
 
-        // Init and clear the screen
-        // display.clear().unwrap();
+        pico_state.output_pins.pins_schedule_compare(
+            time_keeper.produce_time_in_seconds()
+        );
 
-        // for c in time_message {
-        //     let _ = display.write_str(unsafe { core::str::from_utf8_unchecked(&[c]) });
-        // }
+        // LOOP SYNC TOOLING -- flash onboard LED on ~1hz
+        if time_keeper.hz {
+            gp25.set_high().unwrap();
+        } else {
+            gp25.set_low().unwrap();
+        }
+
+        // let hours = get_time_chars(time_keeper.hours);
+        // let minutes = get_time_chars(time_keeper.minutes);
+        // let seconds = get_time_chars(time_keeper.seconds);
+        // let time_message = [
+        //     hours.0 as u8,
+        //     hours.1 as u8,
+        //     ':' as u8,
+        //     minutes.0 as u8,
+        //     minutes.1 as u8,
+        //     ':' as u8,
+        //     seconds.0 as u8,
+        //     seconds.1 as u8,
+        // ];
+
 
         // map Input Status to PicoState
         pico_state.enter_button = gp6.is_high().unwrap();
@@ -191,24 +227,18 @@ fn main() -> ! {
         // map comms data onto pico state
         // TODO|AW: !
 
-        // map output status onto PicoState
 
 
         // Mark menu for eval on next loop
         if pico_state.enter_button {
-            // TODO|AW: do enter button stuff
-            // menu.mark_selection();
             menu_nav.make_selection();
             pico_state.queue_lcd_update();
         } else if pico_state.cursor_move_button {
-            // TODO|AW: do cursor move button stuff
-            // menu.handle_cursor_move();
             menu_nav.cursor_next();
             pico_state.queue_lcd_update();
         }
 
-
-        // TODO|AW: create an LCD Screen abstraction
+        // TODO|AW: create an LCD Screen abstraction module for handling this
         if pico_state.lcd_update_q {
             // CLEAR!
             display.clear().unwrap();
@@ -258,39 +288,48 @@ fn main() -> ! {
                 }
             }
 
+            // TODO|AW: do not put any delays in the loop.  This breaks time-keeping.
+            // Prevent LCD Update Spam
             delay.delay_ms(100);
+
+            // Dequeue LCD Update
+            pico_state.lcd_update_complete();
         }
 
 
+        if menu_nav.update_action_queued {
 
-        // TODO|AW: Refactor everything below here.
-        // create one second delay
-        // delay.delay_ms(1000);
+            // TODO|AW: pico_state needs to be able to determine update type.
+            // TODO|AW: how to determine which type of update to create?
+            let update: PinScheduleUpdate = create_schedule_update(&menu_nav);
+            pico_state.handle_pin_schedule_update(update);
 
-        // Timekeeper updates because it's role is to keep track of a
-        // locally created system time.
-        // time_keeper.tick();
-
-        // Check if the time adjust is pressed
-        if gp15.is_high().unwrap() {
-            time_keeper.increment_hours();
-        }
-
-        let tk_hours = time_keeper.hours;
-
-        // GP18 Output handling
-        let gp18_after_start_time = tk_hours >= gp18_config.start_hours;
-        let gp18_before_end_time: bool = tk_hours < gp18_config.end_hours;
-        let gp18_on: bool = gp18_after_start_time && gp18_before_end_time;
-
-        if gp18_on {
-            gp18.set_high().unwrap();
-        } else {
-            gp18.set_low().unwrap();
         }
 
 
-        // Dequeue LCD Update
-        pico_state.lcd_update_complete();
+        // Evaluate Pico State And Map Outputs
+        if time_keeper.hz1 {
+
+            // Output Pin 10
+            if pico_state.output_pins.pin10.active {
+                gp10.set_high().unwrap();
+            } else {
+                gp10.set_low().unwrap();
+            }
+
+            // Output Pin 11
+            if pico_state.output_pins.pin11.active {
+                gp11.set_high().unwrap();
+            } else {
+                gp11.set_low().unwrap();
+            }
+
+            // Output Pin 18
+            if pico_state.output_pins.pin18.active {
+                gp18.set_high().unwrap();
+            } else {
+                gp18.set_low().unwrap();
+            }
+        }
     }
 }
