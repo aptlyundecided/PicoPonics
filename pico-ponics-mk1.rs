@@ -8,11 +8,7 @@ extern crate rp2040_hal;
 extern crate ssd1306;
 extern crate fugit;
 
-/// Import my PicoPonics lib
-// mod _lib;
-// mod _lib;
-// mod pico_ponics_lib;
-// extern crate tlib;
+/// Import the PicoPonics lib
 extern crate _lib;
 
 /// configure PicoPonics lib utilization
@@ -20,24 +16,24 @@ use _lib::time_keeper::time_keeper::TimeKeeper;
 use _lib::time_keeper::u8_time_mapping::get_time_chars;
 use _lib::gp_config::gp_config::GPConfig;
 use _lib::state_machine::state::{PicoState};
-// use _lib::lcd_menu::menu::Menu;
 use _lib::lcd_menu::menu_nodes::menu_node_navigator::MenuNodeNavigator;
 
-// Alias for our HAL crate
+// Alias for the HAL crate
 use rp2040_hal as hal;
 
-// A shorter alias for the Peripheral Access Crate, which provides low-level
-// register access
+// prep for RP2040 pac and pins accessing
 use hal::pac;
 use hal::gpio::Pins;
 
-// Some traits we need
-// use embedded_hal::digital::v2::InputPin;
+// Some traits we need use embedded_hal::digital::v2::InputPin;
 use embedded_hal::digital::v2::{InputPin, OutputPin};
 use rp2040_hal::clocks::Clock;
 
+// eh?
 use fugit::RateExtU32;
 use core::fmt::Write;
+
+// More PicoPonics specific imports
 use _lib::state_machine::interface_utils::lcd_menu_interpreter::create_schedule_update::create_schedule_update;
 use _lib::state_machine::state_update_actions::pin_schedule_updates::PinScheduleUpdate;
 use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
@@ -77,7 +73,8 @@ fn main() -> ! {
     // Create menu reference variable for user interface handling
     // let mut menu: Menu = Menu::new();
     let mut menu_nav = MenuNodeNavigator::new();
-    menu_nav.load_node_selection(10000);
+    menu_nav.load_node_selection(0);
+
     // Configure the clocks
     let clocks = hal::clocks::init_clocks_and_plls(
         XTAL_FREQ_HZ,
@@ -111,7 +108,7 @@ fn main() -> ! {
 
     /// Configure Inputs [gp6 - gp9]
     /// ---
-    /// Only four Dinputs because I want more availability for comms channels.  I want
+    /// Only four inputs because I want more availability for comms channels.  I want
     /// inputs to come from external devices that I'm tinkering with later on.
     let gp6 = pins.gpio6.into_pull_down_input();
     let gp7 = pins.gpio7.into_pull_down_input();
@@ -119,7 +116,6 @@ fn main() -> ! {
     let gp9 = pins.gpio9.into_pull_down_input();
 
     // TODO:AW change to output pin
-    let gp15 = pins.gpio15.into_pull_down_input();
 
     /// Configure Outputs [gp10 - gp21]
     /// ---
@@ -127,7 +123,7 @@ fn main() -> ! {
     /// advanced timer.  Advanced inputs will come from i2C comms from another Pico.
     let mut gp10 = pins.gpio10.into_push_pull_output();
     let mut gp11 = pins.gpio11.into_push_pull_output();
-    let mut gp12 = pins.gpio12.into_push_pull_output();
+    // let mut gp15 = pins.gpio15.into_push_pull_output();
 
     let mut gp18 = pins.gpio18.into_push_pull_output();
     let mut gp25 = pins.gpio25.into_push_pull_output();
@@ -190,6 +186,7 @@ fn main() -> ! {
      */
     loop {
 
+
         // TODO|AW: This is a hack to get the time keeper working
         // Rudimentary Time Keeping
         time_keeper.loop_handler();
@@ -199,34 +196,23 @@ fn main() -> ! {
         );
 
         // LOOP SYNC TOOLING -- flash onboard LED on ~1hz
+        // This is so I can ensure that the board 'tick'
+        // rate is ~1s.  Time sync proper is coming in
+        // future iterations.
         if time_keeper.hz {
             gp25.set_high().unwrap();
         } else {
             gp25.set_low().unwrap();
         }
 
-        // let hours = get_time_chars(time_keeper.hours);
-        // let minutes = get_time_chars(time_keeper.minutes);
-        // let seconds = get_time_chars(time_keeper.seconds);
-        // let time_message = [
-        //     hours.0 as u8,
-        //     hours.1 as u8,
-        //     ':' as u8,
-        //     minutes.0 as u8,
-        //     minutes.1 as u8,
-        //     ':' as u8,
-        //     seconds.0 as u8,
-        //     seconds.1 as u8,
-        // ];
-
 
         // map Input Status to PicoState
         pico_state.enter_button = gp6.is_high().unwrap();
         pico_state.cursor_move_button = gp7.is_high().unwrap();
+        pico_state.hour_index_button = gp8.is_high().unwrap();
 
         // map comms data onto pico state
         // TODO|AW: !
-
 
 
         // Mark menu for eval on next loop
@@ -235,6 +221,9 @@ fn main() -> ! {
             pico_state.queue_lcd_update();
         } else if pico_state.cursor_move_button {
             menu_nav.cursor_next();
+            pico_state.queue_lcd_update();
+        } else if pico_state.hour_index_button {
+            time_keeper.increment_hours();
             pico_state.queue_lcd_update();
         }
 
@@ -245,6 +234,23 @@ fn main() -> ! {
 
             // LCD MENU CONTROL --> Menu Title / Name
             match menu_nav.current_node.node_id {
+                0 => {
+                    let _ = display.write_str("Main Menu>>\n\n");
+                }
+                1000 => {
+                    let _ = display.write_str("Sys Time\n\n");
+                    let time: [char; 8] = time_keeper.produce_time_char_array();
+
+                    for ch in time {
+                        let c = ch as u8;
+                        let _ = display.write_str(
+                            unsafe { core::str::from_utf8_unchecked(&[c]) }
+                        );
+                    }
+
+                    let _ = display.write_str("\n");
+
+                }
                 10000 => {
                     let _ = display.write_str("Select Pin>>\n\n");
                 }
@@ -259,6 +265,67 @@ fn main() -> ! {
                 }
                 11120 => {
                     let _ = display.write_str("End-Time>>\n\n");
+                }
+                11130 => {
+                    let _ = display.write_str("Schedule>>\n\n");
+
+                    let mut time: [[char; 8]; 2] = [
+                        ['0', '0', ':', '0', '0', ':', '0', '0'],
+                        ['0', '0', ':', '0', '0', ':', '0', '0']
+                    ];
+                    // TODO|AW: CLEAN UP
+                    // TODO|AW: The LCD abstraction becomes more necessary here as the code gets more complex
+                    match menu_nav.meta_data.selected_pin {
+                        Some(pin) => {
+                            match pin {
+                                10 => {
+                                    let _ = display.write_str("<Pin 10>\n\n");
+                                    time = pico_state.output_pins.pin10.get_output_schedule_as_chars();
+                                }
+                                11 => {
+                                    let _ = display.write_str("<Pin 11>\n\n");
+                                    time = pico_state.output_pins.pin11.get_output_schedule_as_chars();
+                                }
+                                12 => {
+                                    let _ = display.write_str("<Pin 12>\n\n");
+                                    time = pico_state.output_pins.pin12.get_output_schedule_as_chars();
+                                }
+                                13 => {
+                                    let _ = display.write_str("<Pin 13>\n\n");
+                                    time = pico_state.output_pins.pin13.get_output_schedule_as_chars();
+
+                                }
+                                18 => {
+                                    let _ = display.write_str("<Pin 18>\n\n");
+                                    time = pico_state.output_pins.pin13.get_output_schedule_as_chars();
+                                }
+                                _ => {
+                                    let _ = display.write_str("Pin ??\n\n");
+                                    time = [['_'; 8]; 2];
+                                }
+                            }
+                        }
+                        _ => {
+                            let _ = display.write_str("__:__:__\n\n");
+                        }
+                    }
+
+                    // TODO|AW: ADD this to the LCD Abstraction
+                    let __ = display.write_str("s:");
+                    for ch in time[0 as usize] {
+                        let _ = display.write_str(
+                            unsafe { core::str::from_utf8_unchecked(&[ch as u8]) }
+                        );
+                    }
+                    let nl0 = display.write_str("\n");
+                    let ___ = display.write_str(" e:");
+                    for ch in time[1 as usize] {
+                        let _ = display.write_str(
+                            unsafe { core::str::from_utf8_unchecked(&[ch as u8]) }
+                        );
+                    }
+                    let nl = display.write_str("\n");
+
                 }
                 _ => {
                     let _ = display.write_str("Farts!>>\n\n");
@@ -296,18 +363,39 @@ fn main() -> ! {
             pico_state.lcd_update_complete();
         }
 
-
+        // Move UI data from the LCD menu into the Application State
         if menu_nav.update_action_queued {
 
-            // TODO|AW: pico_state needs to be able to determine update type.
-            // TODO|AW: how to determine which type of update to create?
-            let update: PinScheduleUpdate = create_schedule_update(&menu_nav);
-            pico_state.handle_pin_schedule_update(update);
+            if menu_nav.meta_data.is_system_time_adjustment {
+                match menu_nav.meta_data.time_adjustment {
+                    Some(time) => {
+                        match time {
+                            0 => {
+                                time_keeper.increment_hours();
+                            },
+                            2 => {
+                                time_keeper.increment_minutes();
+                            },
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
+            } else {
+                // TODO|AW: pico_state needs to be able to determine update type.
+                // TODO|AW: how to determine which type of update to create?
+                let update: PinScheduleUpdate = create_schedule_update(&menu_nav);
+                pico_state.handle_pin_schedule_update(update);
+                menu_nav.meta_data.time_adjustment = None;
+            }
 
+
+            // clean
+            menu_nav.meta_data.is_system_time_adjustment = false;
         }
 
-
-        // Evaluate Pico State And Map Outputs
+        // TODO|AW: Abstract this into a HAL Context Manager
+        // Evaluate Pico State; handle cyclical updates
         if time_keeper.hz1 {
 
             // Output Pin 10

@@ -1,6 +1,6 @@
 [package]
 name = "pico-ponics"
-version = "0.0.1"
+version = "0.1.0"
 
 
 [target.thumbv6m-none-eabi]
@@ -18,7 +18,7 @@ hd44780-driver = "0.4.0"
 fugit = "0.3.6"
 ssd1306 = "0.7.1"
 pico_ponics_lib = { path = "../pico-ponics-lib" }
-
+elf2uf2-rs = "1.3.7"
 
 [dev-dependencies]
 substance-framework = "0.3.0-alpha"
